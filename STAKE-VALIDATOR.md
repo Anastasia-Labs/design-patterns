@@ -1,25 +1,42 @@
 # Stake Validator Design pattern
 
-In this comprehensive guide, you will discover how to strategically implement the Staking Validator design pattern to enhance your protocol's performance and introduce composability by employing the innovative "withdraw zero trick." 
-
-Staking validators play a central role not only in minimizing the script size of a spending validator but also in optimizing CPU and memory utilization. 
-
-This document provides detailed insights and practical steps to leverage this pattern effectively, empowering you to elevate the efficiency and composability of your protocol.
 ## Table of Contents
 
 - [Stake Validator Design pattern](#stake-validator-design-pattern)
   - [Table of Contents](#table-of-contents)
+  - [How to use this document](#how-to-use-this-document)
   - [Introduction](#introduction)
+  - [Main Features](#main-features)
+  - [Why Staking Validators?](#why-staking-validators)
   - [Cardano model](#cardano-model)
   - [Address type](#address-type)
   - [Script Address](#script-address)
   - [Implementation](#implementation)
 
+## How to use this document
+The documentation is organized sequentially, starting with basics and progressing to advanced topics for
+building your smart contract application.
+You can read it in any order or directly access pages relevant to your use case. 
+A table of contents on the top facilitates easy navigation between sections.
 
 ## Introduction
+In this comprehensive guide, you will discover how to strategically implement the Staking Validator design pattern to enhance your protocol's performance and introduce composability by employing the innovative "withdraw zero trick." 
 
-In Cardano's Proof-of-Stake (PoS), ADA holders through delegation can assign the responsibility of block creation to a chosen pool.
-In return delegators are rewarded with a share of the pool's earnings,this earnings are accrued in their staking account.
+
+
+## Main Features
+- receive staking rewards
+- withdraw staking rewards
+
+
+##  Why Staking Validators?
+
+Consider a scenario with multiple UTXOs at a `Spending Validator`; if your entire protocol logic resides within it, the logic has to run for each UTXO, quickly reaching transaction limits and increasing CPU and memory usage.
+
+The solution involves the `Spending Validator` checking that the `Staking validator` is called in the same transaction, consolidating the logic to run once at the `Staking Validator`. This significantly reduces script size and simplifies business logic.
+
+`Staking Validators` play a crucial role, not only in adding logic to stake control but also in minimizing script size and optimizing CPU and memory usage. 
+It's essential to note that staking validators aren't a one-size-fits-all solution; careful evaluation is needed to determine if this design pattern aligns with your specific purpose.
 
 ## Cardano model
 Cardano is composed of two model
