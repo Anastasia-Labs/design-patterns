@@ -20,7 +20,7 @@ You can read it in any order or directly access pages relevant to your use case.
 A table of contents on the top facilitates easy navigation between sections.
 
 
-It is important to note that all types and functions will be exclusively defined in PlutusTx.
+> It is important to note that all types and functions will be exclusively defined in PlutusTx.
 This approach aims to establish a common foundation, especially in the context of the growing variety of languages such as Plutarch, Aiken, etc.
 
 ## Introduction
