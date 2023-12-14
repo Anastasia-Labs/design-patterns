@@ -19,6 +19,10 @@ building your smart contract application.
 You can read it in any order or directly access pages relevant to your use case. 
 A table of contents on the top facilitates easy navigation between sections.
 
+
+It is important to note that all types and functions will be exclusively defined in PlutusTx.
+This approach aims to establish a common foundation, especially in the context of the growing variety of languages such as Plutarch, Aiken, etc.
+
 ## Introduction
 In this comprehensive guide, you will discover how to strategically implement the Staking Validator design pattern to enhance your protocol's performance and introduce composability by employing the innovative "withdraw zero trick." 
 
@@ -105,7 +109,7 @@ Following this, the staking validator assumes the responsibility of validating e
 ```mermaid
 graph LR
     TX[ Transaction ]
-    subgraph Spending Scripts
+    subgraph Spending Script
     S1((UTxO 1))
     S2((UTxO 2))
     S3((UTxO 3))
@@ -114,9 +118,56 @@ graph LR
     S2 --> TX
     S3 --> TX
     ST{{Staking Script}} -.-o TX
-    TX --> A1[Address]
-    TX --> A2[Address]
-    TX --> A3[Address]
+    TX --> A1((Address))
+    TX --> A2((Address))
+    TX --> A3((Address))
+```
+
+From the transaction we are going to specifically focus on the `ScriptContext`
+The `ScriptContext` is viewed by all the validator within the transaction therefore one can enforce that all `Spending Validators` check that the `Staking Validator` is there.
+
+```haskell
+data ScriptContext = 
+  ScriptContext 
+    { scriptContextTxInfo :: TxInfo
+    , scriptContextPurpose :: ScriptPurpose 
+    }
+```
+if you look at the `TxInfo` type as follows. The Spending Validator must check that field `txInfoWdrl` contains the `StakingCredential` which is the `Staking Validator`
+```haskell
+data TxInfo = TxInfo
+    { txInfoInputs          :: [TxInInfo] -- ^ Transaction inputs
+    , txInfoReferenceInputs :: [TxInInfo] -- ^ Transaction reference inputs
+    , txInfoOutputs         :: [TxOut] -- ^ Transaction outputs
+    , txInfoFee             :: Value -- ^ The fee paid by this transaction.
+    , txInfoMint            :: Value -- ^ The 'Value' minted by this transaction.
+    , txInfoDCert           :: [DCert] -- ^ Digests of certificates included in this transaction
+    , txInfoWdrl            :: Map StakingCredential Integer -- ^ Withdrawals
+    , txInfoValidRange      :: POSIXTimeRange -- ^ The valid range for the transaction.
+    , txInfoSignatories     :: [PubKeyHash] -- ^ Signatures provided with the transaction, attested that they all signed the tx
+    , txInfoRedeemers       :: Map ScriptPurpose Redeemer
+    , txInfoData            :: Map DatumHash Datum
+    , txInfoId              :: TxId -- ^ Hash of the pending transaction (excluding witnesses)
+    }
+```
+
+
+```mermaid
+graph LR
+    TX[ Transaction ]
+    subgraph Spending Script
+    S1((UTxO 1))
+    S2((UTxO 2))
+    S3((UTxO 3))
+    end
+    S1 -->TX
+    S2 --> TX
+    S3 --> TX
+    TX -.->|validates StakingCredential|S1
+    ST{{Staking Script}} -.-o TX
+    TX --> A1((Address))
+    TX --> A2((Address))
+    TX --> A3((Address))
 ```
 
 
