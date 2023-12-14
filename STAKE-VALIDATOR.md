@@ -118,13 +118,17 @@ graph LR
     S2 --> TX
     S3 --> TX
     ST{{Staking Script}} -.-o TX
-    TX --> A1((Address))
-    TX --> A2((Address))
-    TX --> A3((Address))
+    TX --> A1((Output 1))
+    TX --> A2((Output 2))
+    TX --> A3((Output 3))
 ```
 
 From the transaction we are going to specifically focus on the `ScriptContext`
-The `ScriptContext` is viewed by all the validator within the transaction therefore one can enforce that all `Spending Validators` check that the `Staking Validator` is there.
+This shared context is accessible to all validators within the transaction, enabling the enforcement of certain conditions, such as the presence of the `Staking Validator`.
+
+Specifically, every `Spending Validator` is mandated to verify the existence of the `Staking Validator` within the transaction.
+
+Consider the definition of the `ScriptContext` data type:
 
 ```haskell
 data ScriptContext = 
@@ -133,7 +137,10 @@ data ScriptContext =
     , scriptContextPurpose :: ScriptPurpose 
     }
 ```
-if you look at the `TxInfo` type as follows. The Spending Validator must check that field `txInfoWdrl` contains the `StakingCredential` which is the `Staking Validator`
+
+Within the `TxInfo` type, note the importance of the `txInfoWdrl` field.
+This field encapsulates a Map where each `StakingCredential` serves as a key, paired with its corresponding withdrawal amount as the associated value.
+
 ```haskell
 data TxInfo = TxInfo
     { txInfoInputs          :: [TxInInfo] -- ^ Transaction inputs
@@ -151,11 +158,25 @@ data TxInfo = TxInfo
     }
 ```
 
+To implement this validation requirement, a parameterized `Spending Validator` is created as follows:
+
+```haskell
+mkValidator :: StakingCredential -> Datum -> Redeemer -> ScriptContext -> Bool
+mkValidator stakingCred _datum _redeemer context =
+  case PlutusTx.AssocMap.lookup stakingCred $ txInfoWdrl txinfo of
+    Just _ -> True
+    Nothing -> PlutusTx.Prelude.error ()
+  where
+    txinfo = scriptContextTxInfo context
+```
+This `Spending Validator` checks if the specified StakingCredential is present in the `txInfoWdrl` field of the transaction, ensuring the required presence of the `Staking Validator` for validation purposes."
+
+> Note: Please be aware that this validator serves as a reference only. There might be instances where your protocol does not necessarily require the staking validator to be present. This is particularly applicable in situations where, for example, you aim to facilitate a user's withdrawal of assets through the script. In such cases, the primary validation is ensuring that the user is appropriately signing the transaction.
 
 ```mermaid
 graph LR
     TX[ Transaction ]
-    subgraph Spending Script
+    subgraph Inputs
     S1((UTxO 1))
     S2((UTxO 2))
     S3((UTxO 3))
@@ -164,10 +185,12 @@ graph LR
     S2 --> TX
     S3 --> TX
     TX -.->|validates StakingCredential|S1
+    TX -.->|validates StakingCredential|S2
+    TX -.->|validates StakingCredential|S3
     ST{{Staking Script}} -.-o TX
-    TX --> A1((Address))
-    TX --> A2((Address))
-    TX --> A3((Address))
+    TX --> A1((Output 1))
+    TX --> A2((Output 2))
+    TX --> A3((Output 3))
 ```
 
 
