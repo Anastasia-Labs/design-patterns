@@ -6,12 +6,14 @@
   - [Table of Contents](#table-of-contents)
   - [How to use this document](#how-to-use-this-document)
   - [Introduction](#introduction)
-  - [Main Features](#main-features)
   - [Why Staking Validators?](#why-staking-validators)
-  - [Cardano model](#cardano-model)
-  - [Address type](#address-type)
-  - [Script Address](#script-address)
-  - [Implementation](#implementation)
+  - [What are the main features of the Staking Account?](#what-are-the-main-features-of-the-staking-account)
+    - [The Cardano Model Demystified](#the-cardano-model-demystified)
+    - [What are the components of an Address?](#what-are-the-components-of-an-address)
+    - [What are the component of a Script Address?](#what-are-the-component-of-a-script-address)
+      - [Constructing the Script address](#constructing-the-script-address)
+  - [Let's dive into the implementation](#lets-dive-into-the-implementation)
+  - [Create a simple Spending Validator](#create-a-simple-spending-validator)
   - [Validating the business logic at Staking Validator](#validating-the-business-logic-at-staking-validator)
     - [Protect against Double Satisfaction exploit](#protect-against-double-satisfaction-exploit)
 
@@ -30,10 +32,6 @@ In this comprehensive guide, you will discover how to strategically implement th
 
 
 
-## Main Features
-- receive staking rewards
-- withdraw staking rewards
-
 
 ##  Why Staking Validators?
 
@@ -44,27 +42,61 @@ The solution involves the `Spending Validator` checking that the `Staking valida
 `Staking Validators` play a crucial role, not only in adding logic to stake control but also in minimizing script size and optimizing CPU and memory usage. 
 It's essential to note that staking validators aren't a one-size-fits-all solution; careful evaluation is needed to determine if this design pattern aligns with your specific purpose.
 
-## Cardano model
-Cardano is composed of two model
+
+## What are the main features of the Staking Account?
+
+The Staking Account offers to users the ability to:
+
+- Receive Staking Rewards: Users can earn rewards every epoch through the staking of their ADA holdings.
+- Withdraw Staking Rewards: Allows users to withdraw their rewards accumulated through staking.
+- Register Staking Credential
+- Deregister Staking Credential
+- Delegate to a Stake Pool
+
+To comprehend the essence of the Staking Account, it is imperative to grasp the two foundational models within Cardano.
+
+### The Cardano Model Demystified
+Cardano operates on two primary models:
 - The Extended Unspent Transaction Output (EUTXO) model:
-    - each unspent output is linked to a specific address. 
-    - the spending of this input is controlled by the payment credential
+    - Each unspent output is linked to a specific address. 
+    - The spending of this input is controlled by a payment credential or a script credential
 - The Accounting model (Staking):
     - Each utxo can be associated with an address containing a staking credential
     - Staking credential owners have control over delegation and possess the capability to withdraw rewards.
 
-## Address type
+### What are the components of an Address?
 Cardano address consists of two crucial components.
  - Payment Credential
     - Controls the spending of the UTXO associated with the payment credential address.
  - Staking Credential
     - Controls the registration, de-registration, delegation, and withdrawal of rewards 
+
+Let's explore the representation of an address type in Plutus:
+
+Constructing an Address involves specifying the Credential and optionally the StakingCredential
+```haskell
+data Address = 
+  Address 
+  { addressCredential :: Credential
+  , addressStakingCredential :: Maybe StakingCredential 
+  }
+```
+
 > Note: While it is possible to construct addresses without a staking credential, this document will not delve into that aspect.
 
-## Script Address
+### What are the component of a Script Address?
 Addresses are not only used in wallet, but also in smart contracts, often referred to as scripts.
 
-One can created a script address by hashing the Spending Validator and the Staking Validator. 
+For the purpose of this article we are going to create an Script Address by hashing the Spending Validator and the Staking Validator. 
+
+#### Constructing the Script address
+In the below code we can see that our address is composed of the Spending Validator and Staking Validator
+```haskell
+scriptAddress = 
+  Address 
+    (ScriptCredential $ ScriptHash "SpendingValidatorHash") 
+    (Just $ StakingHash $ ScriptCredential $ ScriptHash "StakingValidatorHash")
+```
 
 ```mermaid
 graph TD
@@ -82,12 +114,13 @@ graph TD
   end
   end
 ```
-
-UTXO are associated with an Address with both components `Payment Credential` and `Staking Credential`
+Once you have the script address and following your business logic, now you can lock assets along with datums into the Script Address, therefore associating the new EUTXO and the Script Address with both components `Payment Credential` and `Staking Credential`
 
 ```mermaid
 graph TD
-  subgraph UTXO
+  U(UTXO) --> SA
+  U(UTXO) --> A(Assets)
+  U(UTXO) --> D(Datum)
   SA(Script Address)
   SA -->|Payment Credential| ScriptCredentialSA
   subgraph ScriptCredentialSA[ScriptCredential]
@@ -101,9 +134,8 @@ graph TD
   end
   end
   end
-  end
 ```
-## Implementation
+## Let's dive into the implementation
 
 The strategy involves enforcing the spending validator to invoke the staking validator upon each attempted expenditure of the script input.
 Following this, the staking validator assumes the responsibility of validating each spending script input to ensure strict adherence to the protocol specifications.
@@ -164,7 +196,7 @@ data TxInfo = TxInfo
     , txInfoId              :: TxId -- ^ Hash of the pending transaction (excluding witnesses)
     }
 ```
-
+## Create a simple Spending Validator
 To implement this validation requirement, a parameterized `Spending Validator` is created as follows:
 
 ```haskell
