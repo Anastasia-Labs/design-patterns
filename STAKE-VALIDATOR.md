@@ -12,6 +12,8 @@
   - [Address type](#address-type)
   - [Script Address](#script-address)
   - [Implementation](#implementation)
+  - [Validating the business logic at Staking Validator](#validating-the-business-logic-at-staking-validator)
+    - [Protect against Double Satisfaction exploit](#protect-against-double-satisfaction-exploit)
 
 ## How to use this document
 The documentation is organized sequentially, starting with basics and progressing to advanced topics for
@@ -138,8 +140,13 @@ data ScriptContext =
     }
 ```
 
-Within the `TxInfo` type, note the importance of the `txInfoWdrl` field.
+Within the `TxInfo` type, note the importance of the `txInfoWdrl :: Map StakingCredential Integer` field.
+
 This field encapsulates a Map where each `StakingCredential` serves as a key, paired with its corresponding withdrawal amount as the associated value.
+> Note: The `txInfoWdrl` contains all the staking credentials attempting to withdraw rewards from their staking accounts.
+> Note: as a side note , there is no such thing as Map type, the underlying type is just a builtin list of builtin pairs [^1]
+
+[^1]: s[https://github.com/input-output-hk/plutus/blob/d6382618ae38ce75cdef432e4974809ec466456e/plutus-tx/src/PlutusTx/Builtins/Internal.hs#L473-L476]
 
 ```haskell
 data TxInfo = TxInfo
@@ -169,29 +176,49 @@ mkValidator stakingCred _datum _redeemer context =
   where
     txinfo = scriptContextTxInfo context
 ```
-This `Spending Validator` checks if the specified StakingCredential is present in the `txInfoWdrl` field of the transaction, ensuring the required presence of the `Staking Validator` for validation purposes."
 
-> Note: Please be aware that this validator serves as a reference only. There might be instances where your protocol does not necessarily require the staking validator to be present. This is particularly applicable in situations where, for example, you aim to facilitate a user's withdrawal of assets through the script. In such cases, the primary validation is ensuring that the user is appropriately signing the transaction.
+The `Spending Validator` utilizes the lookup function to verify the presence of the `StakingCredential` from the `Staking Validator` in the `txInfoWdrl` field of the transaction, this enforces the computation of the `Staking Validator`. In the absence of this presence, the spending of the corresponding UTXO will result in failure.
+
+It's important to highlight that this approach is often referred to as the `withdraw zero trick`, but it does not enforce the user to have a specific amount to withdraw, therefore the logic remains independent of the withdrawal amount 
+
+> Note: Please be aware that this validator serves as a reference only. There might be instances where your protocol does not necessarily require the staking validator to be present. This is particularly applicable in situations where, for example, you aim to facilitate a user's withdrawal of assets from the spending script. In such cases, the primary validation is ensuring that the user is appropriately signing the transaction.
+
+
+## Validating the business logic at Staking Validator
+
+As illustrated below, the spending script performs validation by ensuring the presence of the staking credential corresponding to the staking validator within the transaction.
+The staking validator, in turn, is responsible for executing the protocol's business logic, which may vary based on the specific use case. 
 
 ```mermaid
 graph LR
     TX[ Transaction ]
-    subgraph Inputs
+    subgraph Spending Script
     S1((UTxO 1))
     S2((UTxO 2))
     S3((UTxO 3))
     end
-    S1 -->TX
-    S2 --> TX
-    S3 --> TX
-    TX -.->|validates StakingCredential|S1
-    TX -.->|validates StakingCredential|S2
-    TX -.->|validates StakingCredential|S3
-    ST{{Staking Script}} -.-o TX
+    S1 -->|validates \n StakingCredential| TX
+    S2 -->|validates \n StakingCredential| TX
+    S3 -->|validates \n StakingCredential|TX
+    ST{{Staking Script}} -.-o |validates Business Logic|TX
     TX --> A1((Output 1))
     TX --> A2((Output 2))
     TX --> A3((Output 3))
 ```
 
+However it is a must to consider key components to ensure the efficiency and that there are no exploits in your protocol.
 
+### Protect against Double Satisfaction exploit
+
+In scenarios where the protocol necessitates spending from the script back to a specific output—such as returning funds from the script to the same script, directing them to another script, or transferring to a wallet—it is imperative to ensure that each script input is uniquely associated with an output. This preventive measure is essential for mitigating the risk of a double satisfaction attack.
+
+We have outlined some patterns 
+1. Consider taking all the inputs list and making sure each input in unique by folding the list and removing the element use,also within this fold function you must introduce your business logic.The drawback of using this folding pattern is that you input list must be return in the recursion of the computation, increasing the execution of your script.
+
+2. Another consideration involves filtering all inputs associated with the same spending script hash. This approach necessitates the parametrization of the staking validator with the spending script hash. 
+When implementing this filtering mechanism, the staking validator requires the spending script hash as a parameter. Since the spending script inherently depends on the staking credential, introducing the spending script hash into the staking validator may not be possible due to the unidirectional dependency nature of the scripts.
+One potential solution to this challenge is the implementation of a `Multi Validator`. By consolidating both the spending and staking validators, these dependencies can be unified. In this approach, the script hash and staking hash become identical, eliminating the problem posed by unidirectional dependencies.
+In addition to this you must introduce a list of unique index at the redeemer level which corresponds to each input, and because this list is unique you can use it to validate unique outputs 
+
+3. Lastly you can create pick the unfiltered inputs, and a list of unique index for inputs and outputs from the redeemer, and fold each inputs corresponding to each output.
 WIP ...
