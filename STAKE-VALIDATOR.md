@@ -175,10 +175,9 @@ data ScriptContext =
 Within the `TxInfo` type, note the importance of the `txInfoWdrl :: Map StakingCredential Integer` field.
 
 This field encapsulates a Map where each `StakingCredential` serves as a key, paired with its corresponding withdrawal amount as the associated value.
-> Note: The `txInfoWdrl` contains all the staking credentials attempting to withdraw rewards from their staking accounts.
-> Note: as a side note , there is no such thing as Map type, the underlying type is just a builtin list of builtin pairs [^1]
+> Note: The `txInfoWdrl` contains all the staking credentials attempting to withdraw rewards from their staking accounts. Also keep in mind that the Map type in Plutus Core is implemented as a list of builtin pairs [^1].
 
-[^1]: s[https://github.com/input-output-hk/plutus/blob/d6382618ae38ce75cdef432e4974809ec466456e/plutus-tx/src/PlutusTx/Builtins/Internal.hs#L473-L476]
+[^1]: [https://github.com/input-output-hk/plutus/blob/d6382618ae38ce75cdef432e4974809ec466456e/plutus-tx/src/PlutusTx/Builtins/Internal.hs#L473-L476]
 
 ```haskell
 data TxInfo = TxInfo
@@ -231,8 +230,8 @@ graph LR
     end
     S1 -->|validates \n StakingCredential| TX
     S2 -->|validates \n StakingCredential| TX
-    S3 -->|validates \n StakingCredential|TX
-    ST{{Staking Script}} -.-o |validates Business Logic|TX
+    S3 -->|validates \n StakingCredential| TX
+    ST{{Staking Script}} -.-o |validates Business Logic| TX
     TX --> A1((Output 1))
     TX --> A2((Output 2))
     TX --> A3((Output 3))
