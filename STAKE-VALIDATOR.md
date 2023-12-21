@@ -137,7 +137,7 @@ graph TD
 ```
 ## Let's dive into the implementation
 
-The strategy involves enforcing the spending validator to invoke the staking validator upon each attempted expenditure of the script input.
+The strategy involves enforcing the spending validator to require invocation of staking validator, upon each attempted expenditure of the script input.
 Following this, the staking validator assumes the responsibility of validating each spending script input to ensure strict adherence to the protocol specifications.
 
 ```mermaid
@@ -208,11 +208,11 @@ mkValidator stakingCred _datum _redeemer context =
     txinfo = scriptContextTxInfo context
 ```
 
-The `Spending Validator` utilizes the lookup function to verify the presence of the `StakingCredential` from the `Staking Validator` in the `txInfoWdrl` field of the transaction, this enforces the computation of the `Staking Validator`. In the absence of this presence, the spending of the corresponding UTXO will result in failure.
+The `Spending Validator` utilizes the lookup function to verify the presence of `StakingCredential` of the required `Staking Validator` in `txInfoWdrl` field of `TxInfo`. This enforces invocation of the `Staking Validator`. If this lookup fails, spending of the corresponding UTXO will result in failure.
 
-It's important to highlight that this approach is often referred to as the `withdraw zero trick`, but it does not enforce the user to have a specific amount to withdraw, therefore the logic remains independent of the withdrawal amount 
+It's important to highlight that this approach is often referred to as the `withdraw zero trick`, but it does not enforce the user to withdraw a specific amount, therefore the logic remains independent of the withdrawal amount 
 
-> Note: Please be aware that this validator serves as a reference only. There might be instances where your protocol does not necessarily require the staking validator to be present. This is particularly applicable in situations where, for example, you aim to facilitate a user's withdrawal of assets from the spending script. In such cases, the primary validation is ensuring that the user is appropriately signing the transaction.
+> Note: Please be aware that this validator serves only as a reference. There might be instances where your protocol does not necessarily require the staking validator to be present. This is particularly applicable in situations where, for example, you aim to facilitate a user's withdrawal of assets from the spending script. In such cases, the primary validation is ensuring that the user is appropriately signing the transaction.
 
 
 ## Validating the business logic at Staking Validator
@@ -241,15 +241,33 @@ However it is a must to consider key components to ensure the efficiency and tha
 
 ### Protect against Double Satisfaction exploit
 
-In scenarios where the protocol necessitates spending from the script back to a specific output—such as returning funds from the script to the same script, directing them to another script, or transferring to a wallet—it is imperative to ensure that each script input is uniquely associated with an output. This preventive measure is essential for mitigating the risk of a double satisfaction attack.
+In scenarios where the protocol necessitates spending from the script back to a specific output—such as returning funds from the script to the same script, directing them to another script, or transferring to a wallet—it is imperative to ensure that each script input is uniquely associated with an output. This preventive measure is essential for mitigating the risk of [Double Satisfaction Attack](https://plutus.readthedocs.io/en/latest/reference/writing-scripts/common-weaknesses/double-satisfaction.html?highlight=double#unique-outputs).
 
-We have outlined some patterns 
-1. Consider taking all the inputs list and making sure each input in unique by folding the list and removing the element use,also within this fold function you must introduce your business logic.The drawback of using this folding pattern is that you input list must be return in the recursion of the computation, increasing the execution of your script.
+We have outlined some patterns here:
+1. Consider taking the inputs list and making sure each input is unique by folding the list and removing the used element. Additionally, within this fold function you must introduce your business logic. The drawback of using this folding pattern is that your inputs list must be returned in the recursion of the computation, increasing execution cost of your script.
 
 2. Another consideration involves filtering all inputs associated with the same spending script hash. This approach necessitates the parametrization of the staking validator with the spending script hash. 
 When implementing this filtering mechanism, the staking validator requires the spending script hash as a parameter. Since the spending script inherently depends on the staking credential, introducing the spending script hash into the staking validator may not be possible due to the unidirectional dependency nature of the scripts.
 One potential solution to this challenge is the implementation of a `Multi Validator`. By consolidating both the spending and staking validators, these dependencies can be unified. In this approach, the script hash and staking hash become identical, eliminating the problem posed by unidirectional dependencies.
 In addition to this you must introduce a list of unique index at the redeemer level which corresponds to each input, and because this list is unique you can use it to validate unique outputs 
 
-3. Lastly you can create pick the unfiltered inputs, and a list of unique index for inputs and outputs from the redeemer, and fold each inputs corresponding to each output.
+3. Lastly you can use a redeemer containing one-to-one correlation between script input UTxOs and output UTxOs. This is provided via ordered lists of input/output indices of inputs/ouputs present in the Script Context.
+
+```hs
+data StakeValidatorRedeemer = StakeValidatorRedeemer
+  { inputIdxs :: [Integer]
+  , outputIdxs :: [Integer]
+  }
+```
+
+For e.g.
+
+```
+Inputs     :  [swapOrderA, swapOrderC, randomInput3, swapOrderB, randomInput1, randomInput2]          // random inputs are not routing script inputs
+Outputs    :  [swapOutputA, swapOutputB, swapOutputC, randomOuput1, randomOutput2, randomOutput3]
+InputIdxs  :  [0, 1, 3]
+OutputIdxs :  [0, 2, 1]
+```
+
+While its easy to understand and declare indices of outputs (the order in which outputs appear in the tx builder), we cannot control the order of inputs as seen by the script. As inputs are sorted lexicographically based on their output reference, first by Tx#Id and then by Tx#Idx.
 WIP ...
