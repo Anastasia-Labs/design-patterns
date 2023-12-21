@@ -243,8 +243,8 @@ However it is a must to consider key components to ensure the efficiency and tha
 
 In scenarios where the protocol necessitates spending from the script back to a specific output—such as returning funds from the script to the same script, directing them to another script, or transferring to a wallet—it is imperative to ensure that each script input is uniquely associated with an output. This preventive measure is essential for mitigating the risk of [Double Satisfaction Attack](https://plutus.readthedocs.io/en/latest/reference/writing-scripts/common-weaknesses/double-satisfaction.html?highlight=double#unique-outputs).
 
-We have outlined some patterns here:
-1. Consider taking the inputs list and making sure each input is unique by folding the list and removing the used element. Additionally, within this fold function you must introduce your business logic. The drawback of using this folding pattern is that your inputs list must be returned in the recursion of the computation, increasing execution cost of your script.
+We have outlined some patterns 
+1. Consider taking all the inputs list and making sure each input in unique by folding the list and removing the element use,also within this fold function you must introduce your business logic.The drawback of using this folding pattern is that you input list must be return in the recursion of the computation, increasing the execution of your script.
 
 2. Another consideration involves filtering all inputs associated with the same spending script hash. This approach necessitates the parametrization of the staking validator with the spending script hash. 
 When implementing this filtering mechanism, the staking validator requires the spending script hash as a parameter. Since the spending script inherently depends on the staking credential, introducing the spending script hash into the staking validator may not be possible due to the unidirectional dependency nature of the scripts.
@@ -263,11 +263,11 @@ data StakeValidatorRedeemer = StakeValidatorRedeemer
 For e.g.
 
 ```
-Inputs     :  [swapOrderA, swapOrderC, randomInput3, swapOrderB, randomInput1, randomInput2]          // random inputs are not routing script inputs
-Outputs    :  [swapOutputA, swapOutputB, swapOutputC, randomOuput1, randomOutput2, randomOutput3]
+Inputs     :  [scriptInputA, scriptInputC, randomInput3, scriptInputB, randomInput1, randomInput2]          // random inputs are not the concerned script inputs
+Outputs    :  [outputA, outputB, outputC, randomOuput1, randomOutput2, randomOutput3]
 InputIdxs  :  [0, 1, 3]
 OutputIdxs :  [0, 2, 1]
 ```
 
-While its easy to understand and declare indices of outputs (the order in which outputs appear in the tx builder), we cannot control the order of inputs as seen by the script. As inputs are sorted lexicographically based on their output reference, first by Tx#Id and then by Tx#Idx.
+Here the validator needs to check that there are no duplicate indices in either of the lists. While its easy to understand and declare indices of outputs (the order in which outputs appear in the tx builder), we cannot control the order of inputs as seen by the script. As inputs are sorted lexicographically based on their output reference, first by Tx#Id and then by Tx#Idx.
 WIP ...
