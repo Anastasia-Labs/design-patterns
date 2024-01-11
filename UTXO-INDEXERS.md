@@ -30,6 +30,16 @@ graph LR
 This straightforward scenario provides a clear validation path, making it relatively simple for the
 smart contract to verify and process the transaction.
 
+The code for the validator in this case would be something like this:
+
+```haskell
+validator :: Datum -> Redeemer -> ScriptContext -> Bool
+validator datum redeemer context =
+  let input    = findOwnInput         context
+      [output] = getContinuingOutputs context
+  in  validateWithInputOutput input output
+```
+
 ## Multiple Inputs and Outputs
 
 However, as the need for increased throughput arises, smart contracts may require the ability to
