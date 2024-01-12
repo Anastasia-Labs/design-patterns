@@ -1,10 +1,11 @@
-# UTxO Indexer Design Pattern
+# UTxO Indexer Design Pattern: Enhancing Smart Contract Validation on Cardano 
 
-Enhancing Smart Contract Validation on Cardano Introduction In the Cardano blockchain, the UTxO
-(Unspent Transaction Output) model is fundamental to the functioning of smart contracts. The UTxO
-model defines how transactions are structured, with inputs consuming existing UTxOs and producing
+## Introduction 
+
+In the Cardano blockchain, the UTxO (Unspent Transaction Output) model is fundamental to the functioning of smart contracts. 
+The UTxO model defines how transactions are structured, consuming existing UTxOs as inputs and producing
 new ones as outputs. This article explores the UTxO Indexer design pattern, focusing on its
-application to streamline the validation process for more complex transactions.
+application to streamline the validation process for complex transactions.
 
 ## Singular Input Processing
 
@@ -17,13 +18,13 @@ illustrates this basic structure:
 graph LR
     TX[Transaction]
     I1(Input)
-    I2(Fees)
     O1(Output)
-    O2(Change)
+    O2(Fees)
+    O3(Change)
     I1 --> TX
-    I2 --> TX
     TX --> O1
     TX --> O2
+    TX --> O3
 ```
 
 This straightforward scenario provides a clear validation path, making it relatively simple for the
@@ -80,12 +81,12 @@ To avoid unintended consequences, the following vulnerabilities must be consider
   [here](https://library.mlabs.city/common-plutus-security-vulnerabilities) is a good article to
   most of the uncovered ones.
 
-## UTxO Indexes in Redeemer
+## UTxO Indices in Redeemer
 
 To address the challenges posed by multiple inputs and outputs, the UTxO Indexer design pattern
-introduces the use of UTxO indexes within the redeemer. The redeemer is a component of a transaction
+introduces the use of UTxO indices within the redeemer. The redeemer is a component of a transaction
 that carries additional data required for smart contract validation. In this context, the indices of
-the inputs and outputs are included in the fields within the redeemer.
+script inputs and their corresponding outputs are included within the redeemer.
 
 ```haskell
 data MyRedeemer = MyRedeemer
@@ -101,12 +102,12 @@ validator datum redeemer context =
   inputs  = txInfoInputs  txInfo
   outputs = txInfoOutputs txInfo
   validateWithIndices (inputIndex, outputIndex) =
-    let input  = inputes `elemAt` inputIndex
+    let input  = inputs `elemAt` inputIndex
         output = outputs `elemAt` outputIndex
     in  validateWithInputOutput input output
 ```
 
-By incorporating UTxO indexes in the redeemer, the validator gains the ability to more effectively
+By incorporating UTxO indices in the redeemer, the validator gains the ability to more effectively
 sort and pair inputs and outputs during the validation process. Additionally, the validator needs to
 ensure that no input or output is used more than once, and that indices are not missing.
 
@@ -119,15 +120,16 @@ the best possible throughput.
 Also, while the ordering of outputs are preserved (the validator gets them in the same order, in
 which the builder of the transaction provided them), the inputs are re-ordered before the validator
 receives them. The good news is that this re-ordering is deterministic, it can be taken into account
-by the transaction builder before sending the transaction to a node for inclusion if the blockchain.
-The inputs are ordered by the id of the UTxO (which consist of the creating transaction hash and the
-index of its output) lexicographically. For the transaction builder to determine the indices of the
-inputs, it needs to order them in the same way before creating the redeemer.
+by the transaction builder before sending the transaction to a node for inclusion in the blockchain.
+The inputs are ordered by the id of the UTxO (which consists of the creating transaction hash and the
+index of its output) lexicographically, first by transaction hash and then by output index. For the 
+transaction builder to determine the indices of the inputs, it needs to order them in the same way 
+before creating the redeemer.
 
 ## Conclusion
 
 The UTxO Indexer design pattern offers a powerful solution to the challenges posed by transactions
-with multiple inputs and outputs. By leveraging UTxO indexes within the redeemer, smart contracts on
+with multiple inputs and outputs. By leveraging UTxO indices within the redeemer, smart contracts on
 the Cardano blockchain can achieve greater throughput without compromising on the efficiency and
 integrity of the validation process. This pattern exemplifies the adaptability and scalability of
 smart contract design in the evolving landscape of blockchain technologies.
