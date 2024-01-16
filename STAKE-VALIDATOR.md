@@ -263,20 +263,24 @@ In scenarios where the protocol necessitates spending from the script back to a 
 
 We have outlined some patterns 
 1. Unique output datum tagging
+
 The simplest implementation to ensure the uniqueness of the script outputs is by tagging the serialized input script outref at the output datum level. 
 This prevents that the outputs remain distinct.
 >Note: This tagging validation should be done at the spending validator.
 
 2. Folding inputs
+
 Consider taking all the inputs list and making sure each input in unique by folding the list and removing the element use,also within this fold function you must introduce your business logic.The drawback of using this folding pattern is that you input list must be return in the recursion of the computation, increasing the execution of your script.
 
 3. Filter inputs using multi-validator
+
 Another consideration involves filtering all inputs associated with the same spending script hash. This approach necessitates the parametrization of the staking validator with the spending script hash. 
 When implementing this filtering mechanism, the staking validator requires the spending script hash as a parameter. Since the spending script inherently depends on the staking credential, introducing the spending script hash into the staking validator may not be possible due to the unidirectional dependency nature of the scripts.
 One potential solution to this challenge is the implementation of a `Multi Validator`. By consolidating both the spending and staking validators, these dependencies can be unified. In this approach, the script hash and staking hash become identical, eliminating the problem posed by unidirectional dependencies.
 In addition to this you must introduce a list of unique index at the redeemer level which corresponds to each input, and because this list is unique you can use it to validate unique outputs 
 
 4. Unique redeemer inputs/ouputs index
+
 Lastly you can use a redeemer containing one-to-one correlation between script input UTxOs and output UTxOs. This is provided via ordered lists of input/output indices of inputs/ouputs present in the Script Context.
 
 ```hs
