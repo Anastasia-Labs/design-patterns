@@ -35,9 +35,27 @@ In this comprehensive guide, you will discover how to strategically implement th
 
 ##  Why Staking Validators?
 
-Consider a scenario with multiple UTXOs at a `Spending Validator`; if your entire protocol logic resides within it, the logic has to run for each UTXO, quickly reaching transaction limits and increasing CPU and memory usage.
+Consider a scenario as described in the illustration below, with multiple UTXOs at a `Spending Validator`; if your entire protocol logic resides within it, the logic has to run for each UTXO, quickly reaching transaction limits and increasing CPU and memory usage.
+
+```mermaid
+graph LR
+    TX[ Transaction ]
+    subgraph Spending Script
+    S1((Input 1))
+    S2((Input 2))
+    S3((Input 3))
+    end
+    S1 -->|validates \n Business logic| TX
+    S2 -->|validates \n Business logic| TX
+    S3 -->|validates \n Business logic| TX
+    TX --> A1((Output 1))
+    TX --> A2((Output 2))
+    TX --> A3((Output 3))
+```
 
 The solution involves the `Spending Validator` checking that the `Staking validator` is called in the same transaction, consolidating the logic to run once at the `Staking Validator`. This significantly reduces script size and simplifies business logic.
+
+
 
 `Staking Validators` play a crucial role, not only in adding logic to stake control but also in minimizing script size and optimizing CPU and memory usage. 
 It's essential to note that staking validators aren't a one-size-fits-all solution; careful evaluation is needed to determine if this design pattern aligns with your specific purpose.
@@ -61,7 +79,7 @@ Cardano operates on two primary models:
     - Each unspent output is linked to a specific address. 
     - The spending of this input is controlled by a payment credential or a script credential
 - The Accounting model (Staking):
-    - Each utxo can be associated with an address containing a staking credential
+    - Each utxo can be associated with an address containing an optional staking credential
     - Staking credential owners have control over delegation and possess the capability to withdraw rewards.
 
 ### What are the components of an Address?
@@ -144,9 +162,9 @@ Following this, the staking validator assumes the responsibility of validating e
 graph LR
     TX[ Transaction ]
     subgraph Spending Script
-    S1((UTxO 1))
-    S2((UTxO 2))
-    S3((UTxO 3))
+    S1((Input 1))
+    S2((Input 2))
+    S3((Input 3))
     end
     S1 --> TX
     S2 --> TX
@@ -241,17 +259,25 @@ However it is a must to consider key components to ensure the efficiency and tha
 
 ### Protect against Double Satisfaction exploit
 
-In scenarios where the protocol necessitates spending from the script back to a specific output—such as returning funds from the script to the same script, directing them to another script, or transferring to a wallet—it is imperative to ensure that each script input is uniquely associated with an output. This preventive measure is essential for mitigating the risk of [Double Satisfaction Attack](https://plutus.readthedocs.io/en/latest/reference/writing-scripts/common-weaknesses/double-satisfaction.html?highlight=double#unique-outputs).
+In scenarios where the protocol necessitates spending from the script back to a specific output—such as returning funds from the script to the same script, directing them to another script, or transferring assets to a wallet, it is imperative to ensure that each script input is uniquely associated with an output. This preventive measure is essential for mitigating the risk of [Double Satisfaction Attack](https://plutus.readthedocs.io/en/latest/reference/writing-scripts/common-weaknesses/double-satisfaction.html?highlight=double#unique-outputs).
 
 We have outlined some patterns 
-1. Consider taking all the inputs list and making sure each input in unique by folding the list and removing the element use,also within this fold function you must introduce your business logic.The drawback of using this folding pattern is that you input list must be return in the recursion of the computation, increasing the execution of your script.
+1. Unique output datum tagging
+The simplest implementation to ensure the uniqueness of the script outputs is by tagging the serialized input script outref at the output datum level. 
+This prevents that the outputs remain distinct.
+>Note: This tagging validation should be done at the spending validator.
 
-2. Another consideration involves filtering all inputs associated with the same spending script hash. This approach necessitates the parametrization of the staking validator with the spending script hash. 
+2. Folding inputs
+Consider taking all the inputs list and making sure each input in unique by folding the list and removing the element use,also within this fold function you must introduce your business logic.The drawback of using this folding pattern is that you input list must be return in the recursion of the computation, increasing the execution of your script.
+
+3. Filter inputs using multi-validator
+Another consideration involves filtering all inputs associated with the same spending script hash. This approach necessitates the parametrization of the staking validator with the spending script hash. 
 When implementing this filtering mechanism, the staking validator requires the spending script hash as a parameter. Since the spending script inherently depends on the staking credential, introducing the spending script hash into the staking validator may not be possible due to the unidirectional dependency nature of the scripts.
 One potential solution to this challenge is the implementation of a `Multi Validator`. By consolidating both the spending and staking validators, these dependencies can be unified. In this approach, the script hash and staking hash become identical, eliminating the problem posed by unidirectional dependencies.
 In addition to this you must introduce a list of unique index at the redeemer level which corresponds to each input, and because this list is unique you can use it to validate unique outputs 
 
-3. Lastly you can use a redeemer containing one-to-one correlation between script input UTxOs and output UTxOs. This is provided via ordered lists of input/output indices of inputs/ouputs present in the Script Context.
+4. Unique redeemer inputs/ouputs index
+Lastly you can use a redeemer containing one-to-one correlation between script input UTxOs and output UTxOs. This is provided via ordered lists of input/output indices of inputs/ouputs present in the Script Context.
 
 ```hs
 data StakeValidatorRedeemer = StakeValidatorRedeemer
@@ -266,8 +292,7 @@ For e.g.
 Inputs     :  [scriptInputA, scriptInputC, randomInput3, scriptInputB, randomInput1, randomInput2]          // random inputs are not the concerned script inputs
 Outputs    :  [outputA, outputB, outputC, randomOuput1, randomOutput2, randomOutput3]
 InputIdxs  :  [0, 1, 3]
-OutputIdxs :  [0, 2, 1]
+OutputIdxs :  [0, 1, 2]
 ```
 
 Here the validator needs to check that there are no duplicate indices in either of the lists. While its easy to understand and declare indices of outputs (the order in which outputs appear in the tx builder), we cannot control the order of inputs as seen by the script. As inputs are sorted lexicographically based on their output reference, first by Tx#Id and then by Tx#Idx.
-WIP ...
