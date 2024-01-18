@@ -30,6 +30,6 @@ forwardWithStakeTrick obsScriptCred tkIdx ctx = fst (head stakeCertPairs) == obs
     info = txInfo ctx 
     stakeCertPairs = AssocMap.toList (txInfoWdrl info)
 ```
-IE check that the StakingCredential is in the first pair in the `txInfoWdrl`.  This script is **O(1)** in the case where you limit it to one shared logic validator (staking validator), or if you don't want to break composability with other staking validator, 
+We are simply checking that the StakingCredential of the the staking validator containing the shared validation logic is in the first pair in `txInfoWdrl`. If the StakingCredential is present in `txInfoWdrl`, that means the staking validator (with our shared validation logic) successfully executed in the transaction. This script is **O(1)** in the case where you limit it to one shared logic validator (staking validator), or if you don't want to break composability with other staking validator, 
 then it becomes** O(obs_N)** where `obs_N` is the number of Observe validators that are executed in the transaction as you have to verify that the StakingCredential is present in `txInfoWdrl`.
 
