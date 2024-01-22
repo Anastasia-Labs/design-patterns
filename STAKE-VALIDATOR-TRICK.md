@@ -19,9 +19,9 @@ forwardNFTValidator stateToken _ tkIdx ctx =  assetClassValueOf stateToken (txIn
 ```
 
 With this pattern DApps are able to process roughly 8-15 forwardNFTValidator UTxO's  per transaction without exceeding script budget limitations.
-The time complexity of unlocking a UTxO from the **O(n)** **per UTxO being spent** from the forwardNFTValidator where n is the number of tx inputs. Since this logic is executed once per input that is spent from the forwardNFTValidator in the transaction, the total time complexity of this design pattern is **O(n^2)**. 
+The time complexity of unlocking a UTxO from the **O(n)** per UTxO being spent from the forwardNFTValidator where n is the number of inputs in the transaction. Since this logic is executed once per input that is spent from the forwardNFTValidator, the total time complexity of this design pattern is **O(n^2)**. 
 
-The redundant execution of searching the tx inputs for an input with some token is a huge throughput bottleneck for these DApps. Using the stake validator trick, the time complexity of the forwarding logic is improved to **O(1)**, and thus the overall time complexity is improved from **O(n^2)** to **O(n)**. 
+The redundant execution of identical validation logic across spending validator executions is a huge throughput bottleneck for DApps. Using the stake validator trick the shared logic is moved into a staking script which is only executed once per transaction (as opposed to once for each UTxO from spending validator). In the case of the forwarding validator design pattern, with this trick we can improve the time complexity of the forwarding logic to **O(1)**, and thus the overall time complexity is improved from **O(n^2)** to **O(n)**. 
 
 For the stake validator trick, the forwardValidator logic becomes:
 ```haskell
