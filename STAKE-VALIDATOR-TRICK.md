@@ -19,17 +19,21 @@ forwardNFTValidator stateToken _ tkIdx ctx =  assetClassValueOf stateToken (txIn
 ```
 
 With this pattern DApps are able to process roughly 8-15 forwardNFTValidator UTxO's  per transaction without exceeding script budget limitations.
-The time complexity of unlocking a UTxO from the **O(n)** per UTxO being spent from the forwardNFTValidator where n is the number of tx inputs. This logic is executed once per input that is spent from the forwardNFTValidator in the transaction. 
+The time complexity of unlocking a UTxO from the **O(n)** **per UTxO being spent** from the forwardNFTValidator where n is the number of tx inputs. Since this logic is executed once per input that is spent from the forwardNFTValidator in the transaction, the total time complexity of this design pattern is **O(n^2)**. 
 
-The redundant execution of searching the inputs for a token a huge throughput bottleneck for these DApps; the total complexity is **O(n*m)** where n is the number of inputs and m is the number of `forwardValidator` inputs + `forwardValidator` minting policies.
-Using the stake validator trick, the time complexity of the forwarding logic is improved to **O(1)**. The forwardValidator logic becomes:
+The redundant execution of searching the tx inputs for an input with some token is a huge throughput bottleneck for these DApps. Using the stake validator trick, the time complexity of the forwarding logic is improved to **O(1)**, and thus the overall time complexity is improved from **O(n^2)** to **O(n)**. 
+
+For the stake validator trick, the forwardValidator logic becomes:
 ```haskell
 forwardWithStakeTrick:: StakingCredential -> BuiltinData -> BuiltinData -> ScriptContext -> ()
 forwardWithStakeTrick obsScriptCred tkIdx ctx = fst (head stakeCertPairs) == obsScriptCred 
   where 
     info = txInfo ctx 
     stakeCertPairs = AssocMap.toList (txInfoWdrl info)
+
+stakeValidatorWithSharedLogic :: AssetClass -> BuiltinData -> ScriptContext -> () 
+stakeValidatorWithSharedLogic stateToken _rdmr ctx = assetClassValueOf stateToken (valueSpent (txInfo ctx)) == 1
 ```
-We are simply checking that the StakingCredential of the the staking validator containing the shared validation logic is in the first pair in `txInfoWdrl`. If the StakingCredential is present in `txInfoWdrl`, that means the staking validator (with our shared validation logic) successfully executed in the transaction. This script is **O(1)** in the case where you limit it to one shared logic validator (staking validator), or if you don't want to break composability with other staking validator, 
+For the stake validator trick, we are simply checking that the StakingCredential of the the staking validator containing the shared validation logic is in the first pair in `txInfoWdrl`. If the StakingCredential is present in `txInfoWdrl`, that means the staking validator (with our shared validation logic) successfully executed in the transaction. This script is **O(1)** in the case where you limit it to one shared logic validator (staking validator), or if you don't want to break composability with other staking validator, 
 then it becomes** O(obs_N)** where `obs_N` is the number of Observe validators that are executed in the transaction as you have to verify that the StakingCredential is present in `txInfoWdrl`.
 
