@@ -8,7 +8,7 @@ This is commonly referred to as the forwarding validator design pattern. In this
 forwardNFTValidator :: AssetClass -> BuiltinData -> BuiltinData -> ScriptContext -> () 
 forwardNFTValidator stateToken _ _ ctx = assetClassValueOf stateToken (valueSpent (txInfo ctx)) == 1
 ```
-The above validator is *forwarding* its validation logic to the spending validator where the state token is locked that would the shared / global validation logic. By enforcing that one of the transaction inputs contains the state token, 
+The above validator is *forwarding* its validation logic to the spending validator where the state token is locked that contains the shared / global validation logic. By enforcing that one of the transaction inputs contains the state token, 
 we guarantee that the spending validator with the state token successfully executes in the transaction.  
 
 This pattern is a core component of the batcher architecture. Some protocols improve on this pattern by including the index of the input with the state token in the redeemer:
