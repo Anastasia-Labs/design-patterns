@@ -33,11 +33,42 @@ smart contract to verify and process the transaction.
 The code for the validator in this case would be something like this:
 
 ```haskell
-validator :: Datum -> Redeemer -> ScriptContext -> Bool
-validator datum redeemer context =
+validatorA :: Datum -> Redeemer -> ScriptContext -> Bool
+validatorA datum redeemer context =
   let input    = findOwnInput         context
       [output] = getContinuingOutputs context
   in  validateWithInputOutput input output
+    where
+    findOwnInput :: ScriptContext -> Maybe TxInInfo
+    findOwnInput ScriptContext{scriptContextTxInfo=TxInfo{txInfoInputs},                   
+                           scriptContextPurpose=Spending txOutRef} =
+        find (\TxInInfo{txInInfoOutRef} -> txInInfoOutRef == txOutRef) txInfoInputs
+    findOwnInput _ = Nothing
+```
+Note that `findOwnInput` checks the `TxOutRef` of each input to identify the one currently being validated. In this case, the check (comparing `TxOutRef`) is relatively cheap, but often you will want to search for an input / output with more complex criteria ie:
+
+```haskell
+validatorB :: AssetClass -> BuiltinData -> BuiltinData -> ScriptContext -> () 
+validatorB stateToken _ _ ctx =
+  let ownInput   = findOwnInput ctx
+      authInput  = findAuth ctx  
+      goodOutput = findOutputWithCriteria ctx
+   in validate ownInput authInput goodOutput
+    where
+    findAuth :: ScriptContext -> Maybe TxInInfo
+    findAuth ScriptContext{scriptContextTxInfo=TxInfo{txInfoInputs},                   
+                           scriptContextPurpose=Spending txOutRef} =
+        find (\TxInInfo{txInOutput} -> assetClassValueOf stateToken (txOutValue txInOutput) == 1) txInfoInputs
+    findAuth _ = Nothing
+
+    findOutputWithCriteria :: ScriptContext -> Maybe TxInInfo
+    findOutputWithCriteria ScriptContext{scriptContextTxInfo=TxInfo{txInfoOutputs}} = find (\txOut -> criteria txOut) txInfoOutputs 
+```
+
+Using the redeemer indexing design pattern we can avoid needing to make these checks for each input / output, instead we pass the index of the input / output we are looking into the redeemer then we just make our checks for the element at that index:
+```haskell
+validatorA :: AssetClass -> BuiltinData -> Integer -> ScriptContext -> () 
+validatorA stateToken _ tkIdx ctx =  assetClassValueOf stateToken (txInInfoResolved (elemAt tkIdx (txInfoInputs (txInfo ctx)))) == 1 
 ```
 
 ## Multiple Inputs and Outputs
