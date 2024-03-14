@@ -1,0 +1,53 @@
+### Merkelized Validators - circumvent validator script size limitations
+
+There are very tight execution budget constraints imposed on Plutus script evaluation; this, in combination with the fact that a higher execution budget 
+equates to higher transaction fees for end-users makes it such that ex-unit optimization is an extremely important component of smart contract development on Cardano.
+
+Often the most impactful optimization techniques involve trade-offs between ex-units and script size. This results in a tight balancing act where you want to minimize the
+ex-units while keeping the script below the ~16kb limit (script size that you can store as a reference script is limited by transaction size limit). Powerful ExUnit 
+optimizations such as unrolling recursion, inlining functions and preferring constants over variables all can drastically reduce ExUnit consumption at the cost of increasing
+script size. 
+
+We can take advantage of reference scripts and the withdraw-zero trick to separate the logic (and code) of our validator across a number of stake scripts (which we provide as reference inputs).
+Then our main validator simply checks for the presence of the associated staking script in the `txInfoRedeemers` (and verify that the redeemer to the scripts are as expected) where necessary to execute the branch of logic. 
+
+You can use the withdraw zero trick to prove arbitrary computation was done in a separate script execution (to effectively create merkleized smart contracts):
+Redeemer of stake validator: 
+```haskell
+Redeemer {inputState :: [Data], outputState :: [Data]}
+```
+Arbitrary computation to prove:
+```haskell
+f :: [Data] -> [Data]
+f inputState = ... -- perform computation on x
+```
+Stake Validator Logic:
+```haskell
+stakeValidator redeemer ctx = P.do
+  redF <- pletFields @'["inputState", "outputState"] redeemer
+  pif (f # redF.inputState #== redF.outputState) (popaque $ pconstant ()) error
+```
+Then in the actual validator where we would like to outsource the computation to the stake validator:
+```haskell
+ourValidator stakeCred ... = P.do
+ ...
+ -- verify that the computation was outsourced to the stake validator
+ -- arg1, arg2, arg3 are any arbitrary variables from this validator that we want 
+ -- to perform the computation on.
+ let ourInputState = [arg1, arg2, arg3] 
+ 
+ let stakeRed = 
+   pmustFind 
+     # plam (\red -> 
+         pmatch (pfstBuiltin # red) $ \case 
+           PRewarding ((pfield @"_0" #) -> scred) -> 
+             pand' # (scred #== stakeCred)
+                   # pfield @"inputState" # (punsafeCoerce @StakeRedeemer (psndBuiltin # red)) #== ourInputState 
+           _ -> pconstant False
+       )
+     # pto (pfield @"redeemers" # (pfield @"txInfo" # ctx))
+
+ -- from here on out we know that (psndBuiltin # stakeRed).outputState contains the application of the arbitrary function `f` to our inputs `[arg1, arg2, arg3]` 
+ -- so we have proved that f # (psndBuiltin # stakeRed) #== (psndBuiltin # stakeRed).outputState without actually running f in this validator
+```
+This is useful because with reference scripts this essentially gives us the ability to create scripts with near infinite size which means optimization strategies that involve increasing script size to reduce mem / CPU (ie loop unrolling) now are available to us at zero cost.
