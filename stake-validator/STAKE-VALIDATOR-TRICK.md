@@ -30,12 +30,16 @@ For the stake validator trick, the forwardValidator logic becomes:
 forwardWithStakeTrick:: StakingCredential -> BuiltinData -> BuiltinData -> ScriptContext -> ()
 forwardWithStakeTrick obsScriptCred tkIdx ctx = fst (head stakeCertPairs) == obsScriptCred 
   where 
-    info = txInfo ctx 
+    info = scriptContextTxInfo ctx 
     stakeCertPairs = AssocMap.toList (txInfoWdrl info)
 
 stakeValidatorWithSharedLogic :: AssetClass -> BuiltinData -> ScriptContext -> () 
-stakeValidatorWithSharedLogic stateToken _rdmr ctx = assetClassValueOf stateToken (valueSpent (txInfo ctx)) == 1
+stakeValidatorWithSharedLogic stateToken _rdmr ctx = 
+  let !(Rewarding x) = scriptContextTxInfo ctx
+   in assetClassValueOf stateToken (valueSpent (txInfo ctx)) == 1
 ```
 For the stake validator trick, we are simply checking that the StakingCredential of the the staking validator containing the shared validation logic is in the first pair in `txInfoWdrl`. If the StakingCredential is present in `txInfoWdrl`, that means the staking validator (with our shared validation logic) successfully executed in the transaction. This script is **O(1)** in the case where you limit it to one shared logic validator (staking validator), or if you don't want to break composability with other staking validator, 
 then it becomes **O(obs_N)** where `obs_N` is the number of Observe validators that are executed in the transaction as you have to verify that the StakingCredential is present in `txInfoWdrl`.
+
+We enforce that the script purpose is rewarding to prevent delegation which complicates the offchain code since we could no-longer simply withdraw zero; if rewards have been accumulated we would have to withdraw the accumulated amount of rewards. 
 
