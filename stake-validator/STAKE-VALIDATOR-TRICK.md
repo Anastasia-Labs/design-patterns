@@ -21,9 +21,9 @@ forwardNFTValidator stateToken _ tkIdx ctx =  assetClassValueOf stateToken (txIn
 ```
 
 With this pattern DApps are able to process roughly 8-15 forwardNFTValidator UTxO's  per transaction without exceeding script budget limitations.
-The time complexity of unlocking a UTxO from the **O(n)** per UTxO being spent from the forwardNFTValidator where n is the number of inputs in the transaction. Since this logic is executed once per input that is spent from the forwardNFTValidator, the total time complexity of this design pattern is **O(n^2)**. 
+The time complexity of unlocking a UTxO from the `O(n)` per UTxO being spent from the forwardNFTValidator where n is the number of inputs in the transaction. Since this logic is executed once per input that is spent from the forwardNFTValidator, the total time complexity of this design pattern is `O(n^2)`. 
 
-The redundant execution of identical validation logic across spending validator executions is a huge throughput bottleneck for DApps. Using the stake validator trick the shared logic is moved into a staking script which is only executed once per transaction (as opposed to once for each UTxO from spending validator). In the case of the forwarding validator design pattern, with this trick we can improve the time complexity of the forwarding logic to **O(1)**, and thus the overall time complexity is improved from **O(n^2)** to **O(n)**. 
+The redundant execution of identical validation logic across spending validator executions is a huge throughput bottleneck for DApps. Using the stake validator trick the shared logic is moved into a staking script which is only executed once per transaction (as opposed to once for each UTxO from spending validator). In the case of the forwarding validator design pattern, with this trick we can improve the time complexity of the forwarding logic to `O(1)`, and thus the overall time complexity is improved from `O(n^2)` to `O(n)`. 
 
 For the stake validator trick, the forwardValidator logic becomes:
 ```haskell
@@ -38,8 +38,8 @@ stakeValidatorWithSharedLogic stateToken _rdmr ctx =
   let !(Rewarding x) = scriptContextTxInfo ctx
    in assetClassValueOf stateToken (valueSpent (txInfo ctx)) == 1
 ```
-For the stake validator trick, we are simply checking that the StakingCredential of the the staking validator containing the shared validation logic is in the first pair in `txInfoWdrl`. If the StakingCredential is present in `txInfoWdrl`, that means the staking validator (with our shared validation logic) successfully executed in the transaction. This script is **O(1)** in the case where you limit it to one shared logic validator (staking validator), or if you don't want to break composability with other staking validator, 
-then it becomes **O(obs_N)** where `obs_N` is the number of Observe validators that are executed in the transaction as you have to verify that the StakingCredential is present in `txInfoWdrl`.
+For the stake validator trick, we are simply checking that the StakingCredential of the the staking validator containing the shared validation logic is in the first pair in `txInfoWdrl`. If the StakingCredential is present in `txInfoWdrl`, that means the staking validator (with our shared validation logic) successfully executed in the transaction. This script is `O(1)` in the case where you limit it to one shared logic validator (staking validator), or if you don't want to break composability with other staking validator, 
+then it becomes `O(obs_N)` where `obs_N` is the number of Observe validators that are executed in the transaction as you have to verify that the StakingCredential is present in `txInfoWdrl`.
 
 We enforce that the script purpose is rewarding to prevent delegation which complicates the offchain code since we could no-longer simply withdraw zero; if rewards have been accumulated we would have to withdraw the accumulated amount of rewards. 
 
