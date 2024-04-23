@@ -26,7 +26,7 @@ For the 1 bit example above checking is trivial:
 Two redeemers:
 Register and deregister 
 Construction 1 tx with each redeemer transactions; submit those two tx at the same time
-The branch for register controls the validator logic if the number of orders is even and reregister controls the logic if the number of orders is odd
+The branch for register controls the validator logic if the number of orders is even and deregister controls the logic if the number of orders is odd
 Since we know the bit is either set or not set, one of those two tx will go through (make sure both tx contain a common input so both can’t go through)
 For the n bit sequence we use the final bit to store a lock. If the final bit is set, none of the other bits can be modified. You can extend this locking by adding locks to control specific subsequences of bits instead of the whole bit sequence.
 
