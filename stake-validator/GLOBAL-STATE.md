@@ -22,16 +22,20 @@ boolean that tracks whether the current number of genius yield orders processed 
 order minting contract that enforces either a register or deregister of that stake credential occurs in the tx (ie we enforce the bit is flipped).
 
 For the 1 bit example above checking is trivial:
+
 Two redeemers:
 Register and deregister 
 Construction 1 tx with each redeemer transactions; submit those two tx at the same time
 The branch for register controls the validator logic if the number of orders is even and reregister controls the logic if the number of orders is odd
 Since we know the bit is either set or not set, one of those two tx will go through (make sure both tx contain a common input so both can’t go through)
-For the n bit sequence we use the final bit to store a lock. If the final bit is set, none of the other bits can be modified. You can extend this locking by adding locks to control specific subsequences of bits instead of the whole bit sequence
+For the n bit sequence we use the final bit to store a lock. If the final bit is set, none of the other bits can be modified. You can extend this locking by adding locks to control specific subsequences of bits instead of the whole bit sequence.
+
 You can check if a lock is set without flipping it by using delegate (instead of deregister which flips it)
-Delegate can only be done if the script is registered (ie bit is set)
+Delegate can only be done if the script is registered (ie bit is set).
+
 Benchmarked a bit sequence of 36.
 The benchmark was for a simple global state validator where the bit set is used to store a counter of total transactions with a minting policy, where each bit set represents 1 unique tx that executed the minting policy in the block. The mint policy just enforces that atleast one of the stake credentials in the list is registered in the tx (ie atleast one bit gets set). 
+
 In practice, working with the bit set as an integer is very hard. Because it reintroduces concurrency issues.
 When you set bits, you can just submit n of the same transactions that only differ in that they at different bits, and exactly one will go through. When you try start working with the bit set as an integer, then each user tx has to change a large chunk of the bit sequence. That means you have to submit a huge number of transactions to account for the possible permutations of the bits you are trying to modify.
 
