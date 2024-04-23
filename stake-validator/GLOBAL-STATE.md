@@ -2,7 +2,7 @@
 
 Since the release of smart contracts on Cardano, smart contract developers have struggled with the constraints of the local state based DApp architecture. 
 
-Here I propose a design pattern that facilitates true global state based DApps on Cardano. 
+Here we propose a design pattern that facilitates true global state based DApps on Cardano. 
 
 Keep in mind that this is not supposed to be some production dream global state panacea. Just a fun black magic proof of concept that lets you design some interesting Dapps that 
 simply are not possible without global state.
@@ -21,7 +21,6 @@ We design a smart contract that succeeds if the number of genius yield orders pr
 boolean that tracks whether the current number of genius yield orders processed is even or odd. We enforce that all orders are counted by adding new validation logic the to the GY 
 order minting contract that enforces either a register or deregister of that stake credential occurs in the tx (ie we enforce the bit is flipped).
 
-So the global stake validator (which all the other `n` stake validators in the n bit sequence defer their logic to) can check the whole sequence.
 For the 1 bit example above checking is trivial:
 Two redeemers:
 Register and deregister 
