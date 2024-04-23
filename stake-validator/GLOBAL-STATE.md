@@ -35,7 +35,7 @@ The benchmark was for a simple global state validator where the bit set is used 
 In practice, working with the bit set as an integer is very hard. Because it reintroduces concurrency issues.
 When you set bits, you can just submit n of the same transactions that only differ in that they at different bits, and exactly one will go through. When you try start working with the bit set as an integer, then each user tx has to change a large chunk of the bit sequence. That means you have to submit a huge number of transactions to account for the possible permutations of the bits you are trying to modify.
 
-That’s why my naive implementation uses the bit set to represent integers as sum of bits (36 bits allows a global state integer with the max value of 36). I’m sure people smarter than me will be able to figure out unique ways to do other operations and mutate the state more efficiently.
-I worked on this with the intention of demonstrating the value of expanding the account model component of our hybrid ledger. Hopefully to get the ledger team to see the practical utility of such expansion to support payment on demand global state.
+That’s why our naive implementation uses the bit set to represent integers as sum of bits (36 bits allows a global state integer with the max value of 36). We're sure the community will be able to figure out unique ways to do other operations and mutate the state more efficiently.
+We worked on this with the intention of demonstrating the value of expanding the account model component of our hybrid ledger. Hopefully to get the ledger team to see the practical utility of such expansion to support payment on demand global state.
 (The same way the withdraw zero trick got them to see the value of script execution not correlated to ledger actions)
 This all works because any number of independent transactions can operate on the same reward account (staking script) in the same block (register deregister and other operations)
