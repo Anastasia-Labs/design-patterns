@@ -10,7 +10,7 @@
   - [What are the main features of the Staking Account?](#what-are-the-main-features-of-the-staking-account)
     - [The Cardano Model Demystified](#the-cardano-model-demystified)
     - [What are the components of an Address?](#what-are-the-components-of-an-address)
-    - [What are the component of a Script Address?](#what-are-the-component-of-a-script-address)
+    - [What are the components of a Script Address?](#what-are-the-component-of-a-script-address)
       - [Constructing the Script address](#constructing-the-script-address)
   - [Let's dive into the implementation](#lets-dive-into-the-implementation)
   - [Create a simple Spending Validator](#create-a-simple-spending-validator)
@@ -63,7 +63,7 @@ It's essential to note that staking validators aren't a one-size-fits-all soluti
 
 ## What are the main features of the Staking Account?
 
-The Staking Account offers to users the ability to:
+The Staking Account offers users the ability to:
 
 - Receive Staking Rewards: Users can earn rewards every epoch through the staking of their ADA holdings.
 - Withdraw Staking Rewards: Allows users to withdraw their rewards accumulated through staking.
@@ -102,7 +102,7 @@ data Address =
 
 > Note: While it is possible to construct addresses without a staking credential, this document will not delve into that aspect.
 
-### What are the component of a Script Address?
+### What are the components of a Script Address?
 Addresses are not only used in wallet, but also in smart contracts, often referred to as scripts.
 
 For the purpose of this article we are going to create an Script Address by hashing the Spending Validator and the Staking Validator. 

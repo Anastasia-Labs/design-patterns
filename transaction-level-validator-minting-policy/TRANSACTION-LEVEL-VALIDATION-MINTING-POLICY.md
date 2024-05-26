@@ -10,7 +10,7 @@ pre-processing steps, making it less optimal. To overcome this, the technique of
 validation" is employed.
 
 For a detailed implementation of transaction level validation using staking validators, refer to the
-[Stake Validator Design pattern](STAKE-VALIDATOR.md). This document outlines the details of
+[Stake Validator Design pattern](../stake-validator/STAKE-VALIDATOR.md). This document outlines the details of
 implementing the same pattern via minting policies.
 
 ## The Problem
