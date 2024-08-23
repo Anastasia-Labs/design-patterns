@@ -17,8 +17,8 @@ transaction that registers / deregisters some number of the stake scripts ie fli
 
 For a simple 1 bit example:
 
-We design a smart contract that succeeds if the number of genius yield orders processed in the given block is even and fails if it is odd. In this case the global state is just 1 
-boolean that tracks whether the current number of genius yield orders processed is even or odd. We enforce that all orders are counted by adding new validation logic the to the GY 
+We design a smart contract that succeeds if the number of DEX orders processed in the given block is even and fails if it is odd. In this case the global state is just 1 
+boolean that tracks whether the current number of genius yield orders processed is even or odd. We enforce that all orders are counted by adding new validation logic the to the DEX
 order minting contract that enforces either a register or deregister of that stake credential occurs in the tx (ie we enforce the bit is flipped).
 
 For the 1 bit example above checking is trivial:
@@ -40,6 +40,5 @@ In practice, working with the bit set as an integer is very hard. Because it rei
 When you set bits, you can just submit n of the same transactions that only differ in that they at different bits, and exactly one will go through. When you try start working with the bit set as an integer, then each user tx has to change a large chunk of the bit sequence. That means you have to submit a huge number of transactions to account for the possible permutations of the bits you are trying to modify.
 
 That’s why our naive implementation uses the bit set to represent integers as sum of bits (36 bits allows a global state integer with the max value of 36). We're sure the community will be able to figure out unique ways to do other operations and mutate the state more efficiently.
-We worked on this with the intention of demonstrating the value of expanding the account model component of our hybrid ledger. Hopefully to get the ledger team to see the practical utility of such expansion to support payment on demand global state.
-(The same way the withdraw zero trick got them to see the value of script execution not correlated to ledger actions)
+We worked on this with the intention of demonstrating the value of expanding the account model component of our hybrid ledger. Hopefully to get the developer community and ledger team to see the practical utility of such expansion to support payment on demand global state in the same way the withdraw zero trick got them to see the value of script execution not correlated to ledger actions.
 This all works because any number of independent transactions can operate on the same reward account (staking script) in the same block (register deregister and other operations)
