@@ -45,31 +45,53 @@ validatorA datum redeemer context =
         find (\TxInInfo{txInInfoOutRef} -> txInInfoOutRef == txOutRef) txInfoInputs
     findOwnInput _ = Nothing
 ```
-Note that `findOwnInput` checks the `TxOutRef` of each input to identify the one currently being validated. In this case, the check (comparing `TxOutRef`) is relatively cheap, but often you will want to search for an input / output with more complex criteria ie:
+Note that `findOwnInput` checks the `TxOutRef` of each input to identify the one currently being validated. In this case, the check (comparing `TxOutRef`) is relatively cheap, even so, the actual search is very expensive since in the worst-case we traverse the entire list of inputs and check each one. Furthermore, often you will want to search for an input / output with more complex criteria ie:
 
 ```haskell
-validatorB :: AssetClass -> BuiltinData -> BuiltinData -> ScriptContext -> () 
+validatorB :: AssetClass -> BuiltinData -> BuiltinData -> ScriptContext -> Bool
 validatorB stateToken _ _ ctx =
-  let ownInput   = findOwnInput ctx
-      authInput  = findAuth ctx  
+  let authInput  = findAuth ctx  
       goodOutput = findOutputWithCriteria ctx
-   in validate ownInput authInput goodOutput
+   in validate authInput goodOutput
     where
     findAuth :: ScriptContext -> Maybe TxInInfo
-    findAuth ScriptContext{scriptContextTxInfo=TxInfo{txInfoInputs},                   
-                           scriptContextPurpose=Spending txOutRef} =
-        find (\TxInInfo{txInOutput} -> assetClassValueOf stateToken (txOutValue txInOutput) == 1) txInfoInputs
-    findAuth _ = Nothing
+    findAuth ScriptContext{scriptContextTxInfo=TxInfo{txInfoInputs}} =
+      find (\TxInInfo{txInOutput} -> assetClassValueOf stateToken (txOutValue txInOutput) == 1) txInfoInputs
 
     findOutputWithCriteria :: ScriptContext -> Maybe TxInInfo
-    findOutputWithCriteria ScriptContext{scriptContextTxInfo=TxInfo{txInfoOutputs}} = find (\txOut -> criteria txOut) txInfoOutputs 
+    findOutputWithCriteria ScriptContext{scriptContextTxInfo=TxInfo{txInfoOutputs}} =
+      find (\txOut -> criteria txOut) txInfoOutputs 
 ```
 
 Using the redeemer indexing design pattern we can avoid needing to make these checks for each input / output, instead we pass the index of the input / output we are looking into the redeemer then we just make our checks for the element at that index:
 ```haskell
-validatorA :: AssetClass -> BuiltinData -> Integer -> ScriptContext -> () 
-validatorA stateToken _ tkIdx ctx =  assetClassValueOf stateToken (txInInfoResolved (elemAt tkIdx (txInfoInputs (txInfo ctx)))) == 1 
+validatorA :: AssetClass -> BuiltinData -> Integer -> ScriptContext -> Bool 
+validatorA stateToken _ tkIdx ctx =
+  assetClassValueOf stateToken (txInInfoResolved (elemAt tkIdx (txInfoInputs (txInfo ctx)))) == 1  
 ```
+
+This design pattern can complicate the construction of the redeemer in off-chain code because the input index (corresponding to a given UTxO) that you define in the redeemer often will not index the correct UTxO after balancing / coin-selection since new inputs will be added to the transaction. Luckily [lucid-evolution](https://github.com/Anastasia-Labs/lucid-evolution) provides a high-level interface that abstracts all the complexity away and makes writing offchain code for this design pattern extremely simple! 
+
+To construct the redeemer for `validatorA` with [lucid-evolution](https://github.com/Anastasia-Labs/lucid-evolution):
+```typescript
+  //  policy id and asset name in Hex of the state token.
+  const stateTokenId = toUnit(STATE_TOKEN_CS, STATE_TOKEN_NAME)
+  // Query the UTxO that contains the state token
+  const authUTxO = await lucid.utxoByUnit(stateTokenId);
+  // Construct the redeemer to be the index of the authUTxO in the transaction inputs list. 
+  const validatorARedeemer: RedeemerBuilder = {
+    kind: "selected",
+    // the function that constructs the redeemer using inputIndices, the list of indices
+    // corresponding to the UTxOs defined as inputs below. 
+    makeRedeemer: (inputIndices: bigint[]) => {
+      return Data.to(inputIndices[0]);
+    },
+    // the inputs that are relevant to the construction of the redeemer in this case our
+    // redeemer only cares about the index of the input that contains the auth token. 
+    inputs: [authUTxO],
+  };
+```
+For a complete example check the examples included in the current directory. 
 
 ## Multiple Inputs and Outputs
 
