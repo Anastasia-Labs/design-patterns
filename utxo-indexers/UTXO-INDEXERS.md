@@ -1,11 +1,75 @@
-# UTxO Indexer Design Pattern: Enhancing Smart Contract Validation on Cardano 
+# Redeemer Indexing Design Pattern: Enhancing Smart Contract Validation on Cardano 
 
 ## Introduction 
 
-In the Cardano blockchain, the UTxO (Unspent Transaction Output) model is fundamental to the functioning of smart contracts. 
-The UTxO model defines how transactions are structured, consuming existing UTxOs as inputs and producing
-new ones as outputs. This article explores the UTxO Indexer design pattern, focusing on its
-application to streamline the validation process for complex transactions.
+The Redeemer Indexing design pattern leverages the deterministic script evaluation property of the Cardano ledger to achieve substantial performance gains in onchain code. This pattern allows smart contracts to eliminate the need for linear searches and costly on-chain operations by utilizing deterministic indexing in the redeemer, thereby enabling O(1) lookups and drastically reducing validation costs.
+
+## Deterministic Script Evaluation Property
+The deterministic script evaluation property, also stated as "script interpreter arguments are fixed", is a property of the Cardano ledger that guarantees that the outcome of Plutus script evaluation in a (phase-1 valid) transaction depends only on the contents of that transaction, and not on when, by who, or in what block that transaction was submitted. 
+
+Simply put, all the inputs to Plutus scripts are known during transaction construction. 
+
+This property can be leveraged to take advantage of powerful smart contract optimizations. Because all inputs to Plutus scripts are known at the time of transaction construction, a large number of traditionally on-chain operations can be performed off-chain. This ensures that on-chain operations can be minimized to a series of verifications, thereby maintaining the integrity of the transaction.
+
+##  Zero On-Chain Linear Search
+One of the most potent applications of this pattern is the complete elimination of the need to perform linear search operations on-chain. Normally, to find an input, output, or other transaction component (i.e. a specific token within a value), a linear search is required, these operations can become expensive very quickly due to the heavily constrained smart contract execution budget in blockchains. The Redeemer Indexing design pattern allows us to perform these lookup operations offchain. 
+
+In PlutusV3, there is only a single argument to Plutus scripts, namely, the `ScriptContext`.
+
+Roughly the design pattern works as follows:
+1. Construct your transaction including everything except the redeemer through which you will provide the index (in the meantime you can provide a dummy redeemer with a bogus index).
+2. Search the built transaction to obtain the index of the element that you want your onchain code to have access to. 
+3. Construct a redeemer that includes the obtained index and add it to the transaction replacing the dummy one.
+4. In your onchain code, instead of searching for the element you can access it by using `elemAt` with the index provided by your redeemer, and then you just check that the element satisfies the expected criteria.
+ 
+For instance, if you want your validator to have access to a specific tx output you first build your transaction then you search the built transaction to obtain the index of the output, and then you add that index to the redeemer. In your onchain code, instead of searching for the element, you can simply get the `elemAt` the index provided by your redeemer and check that it does indeed satisfy the search criteria. 
+
+Thus, lookups are reduced to O(1) checks, where the on-chain code simply confirms that the indexed element is as expected.
+
+## List Length Operations
+You can also use this design pattern to avoid the need to perform expensive traversals of dynamic data-structures like `Lists` and `Maps` in your onchain code to determine the number of elements they contain. Instead, you can calculate the number of elements offchain, and provide it to the validator via the redeemer, then onchain you only need to check that the length your provided in the redeemer is correct. To perform this check, you apply the builtin `tail` function n times, where n is the `expectedLength` you passed via the redeemer and then you check that the result equals the empty list. 
+
+```haskell
+pbuiltinListLength :: forall s a. (PElemConstraint PBuiltinList a) => Term s PInteger -> Term s (PBuiltinList a :--> PInteger)
+pbuiltinListLength acc =
+  (pfix #$ plam $ \self acc l ->
+    pelimList 
+      (\_ ys -> self # (acc + 1) # ys)  -- cons case
+      acc                               -- nil case
+      l
+  )
+  # acc
+
+pbuiltinListLengthFast :: (PElemConstraint PBuiltinList a, PIsData a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
+pbuiltinListLengthFast = phoistAcyclic $ plam $ \n xs ->
+  pcond 
+    [ ((30 #<= n), ((pbuiltinListLength 30) # (nTails 30 xs)))
+    , ((20 #<= n), ((pbuiltinListLength 20) # (nTails 20 xs)))
+    , ((10 #<= n), ((pbuiltinListLength 10) # (nTails 10 xs)))
+    ]
+    (pbuiltinListLength 0 # xs)
+```
+
+## General Use
+More generally, this design pattern can be used to improve performance in any situation where checking the correctness of a result is more efficient than calculating the result. 
+
+# Example 1: Enforce that the transaction includes exactly `n` script inputs. 
+```haskell
+penforceNSpendRedeemers :: forall {s :: S}. Term s PInteger -> Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PBool
+penforceNSpendRedeemers n rdmrs =
+    let isNonSpend :: Term _ (PAsData PScriptPurpose) -> Term _ PBool
+        isNonSpend red = pfstBuiltin # (pasConstr # (pforgetData red)) #/= 1
+             
+        isLastSpend :: Term _ (PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PBool)
+        isLastSpend = plam $ \redeemers -> 
+          let constrPair :: Term s (PAsData PScriptPurpose)
+              constrPair = pfstBuiltin # (phead # redeemers)
+              constrIdx = pfstBuiltin # (pasConstr # (pforgetData constrPair))
+           in pif 
+                (constrIdx #== 1) 
+                (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
+     in go # 0 # (pnTails (n - 1) (pto rdmrs))
+```
 
 ## Singular Input Processing
 
@@ -178,6 +242,21 @@ The inputs are ordered by the id of the UTxO (which consists of the creating tra
 index of its output) lexicographically, first by transaction hash and then by output index. For the 
 transaction builder to determine the indices of the inputs, it needs to order them in the same way 
 before creating the redeemer.
+
+When using this design pattern to index multiple elements in the same data-structure there is a dangerous
+footgun that can lead to vulnerabilites. You have to account for the fact that since there redeemer 
+can contain arbitrary information, a malicious user may attempt to provide duplicate indices in their 
+redeemer, which if unaccounted for, could trick the smart contract validation logic into believing 
+all the relevant inputs have been processed and validated against (when in actuality the contract has
+processed and validated the same inputs multiple times thus allowing other inputs to be spent without being validated against).
+
+A common way to avoid this potential attack vector is to add checks to your onchain code to enforce that all the
+indices provided by the redeemer are unique (ie. there are no duplicates). Another way is to introduce checks 
+to your onchain code to enforce that the provided indices list is sorted and then instead of using `elemAt` (which
+gets the element at the provided index and discards the list of untraversed elements) you use a variant that
+keeps the untraversed elements and continues on to find the next element. In this solution you should provide the
+relative indices in the redeemer (the number of elements between the current element and the previous element) instead of 
+providing their absolute indexes.
 
 ## Conclusion
 
