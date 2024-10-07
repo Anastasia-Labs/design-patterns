@@ -58,7 +58,7 @@ More generally, this design pattern can be used to improve performance in any si
 penforceNSpendRedeemers :: forall {s :: S}. Term s PInteger -> Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PBool
 penforceNSpendRedeemers n rdmrs =
     let isNonSpend :: Term _ (PAsData PScriptPurpose) -> Term _ PBool
-        isNonSpend red = pfstBuiltin # (pasConstr # (pforgetData red)) #/= 1
+        isNonSpend red = pnot # (pfstBuiltin # (pasConstr # (pforgetData red)) #== 1)
              
         isLastSpend :: Term _ (PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PBool)
         isLastSpend = plam $ \redeemers -> 
@@ -68,7 +68,8 @@ penforceNSpendRedeemers n rdmrs =
            in pif 
                 (constrIdx #== 1) 
                 (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
-     in go # 0 # (pnTails (n - 1) (pto rdmrs))
+                perror
+     in isLastSpend # (pdropFast # (n - 1) # (pto rdmrs))
 ```
 
 ## Singular Input Processing
