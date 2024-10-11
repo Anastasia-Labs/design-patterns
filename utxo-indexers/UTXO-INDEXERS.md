@@ -29,124 +29,40 @@ Thus, lookups are reduced to O(1) checks, where the on-chain code simply confirm
 ## List Length Operations
 You can also use this design pattern to avoid the need to perform expensive traversals of dynamic data-structures like `Lists` and `Maps` in your onchain code to determine the number of elements they contain. Instead, you can calculate the number of elements offchain, and provide it to the validator via the redeemer, then onchain you only need to check that the length your provided in the redeemer is correct. To perform this check, you apply the builtin `tail` function n times, where n is the `expectedLength` you passed via the redeemer and then you check that the result equals the empty list. 
 
+Here is a non-optimized implementation of a length function that calculates and returns the number of elements in a `BuiltinList`.
 ```haskell
-builtinListLength :: forall a. Integer -> BI.BuiltinList a -> Integer
-builtinListLength acc l = 
-  case l of
-    [] -> acc
-    _ : xs -> builtinListLength (acc + 1) xs
-
-builtinListLengthFast :: forall a. Integer -> BI.BuiltinList a -> Integer
-builtinListLengthFast n xs
-  | 30 <= n = builtinListLength 30 (BI.tail (BI.tail (BI.tail ... (BI.tail xs))))  -- replace with 30 total BI.tail calls
-  | 20 <= n = builtinListLength 20 (BI.tail (BI.tail (BI.tail ... (BI.tail xs))))  -- 20 BI.tail calls
-  | 10 <= n = builtinListLength 10 (BI.tail (BI.tail (BI.tail ... (BI.tail xs))))  -- 10 BI.tail calls
-  | otherwise = builtinListLength 0 xs
+builtinListLength :: Integer -> BI.BuiltinList a -> Integer
+builtinListLength l =
+ go :: Integer -> BI.BuiltinList a -> Integer
+ go acc xs =   
+   -- matchList is a builtin function that takes a list and branches depending on whether the list is empty or not
+   -- it expects the non-empty branch argument to be a function (\x xs -> ..) where x is the head of the list and xs is the tail.
+   BI.matchList xs
+     -- if the list is empty we return `acc` 
+     acc
+     -- if the list is non-empty we increase the counter and recurse
+     (\_ ys -> go (acc + 1) ys)
 ```
-If you don't want to manually write `BI.tail` dozens of times, you can use Template Haskell to automate it:
-```haskell
-import qualified PlutusTx.Builtins as BI
-import qualified PlutusTx.Builtins.Internal as BI
-import Language.Haskell.TH
+As an exercise in this design pattern, try to design an optimized version of the length function that accepts as an argument the expected list length (computed offchain and passed to the onchain code via the redeemer) and uses that argument to reduce unnecessary recursion / null checks on the list. (hint: think about how you can replace `matchList`). 
 
-builtinListLength :: forall a. Integer -> BI.BuiltinList a -> Integer
-builtinListLength acc l = 
-  case l of
-    [] -> acc
-    _ : xs -> builtinListLength (acc + 1) xs
-
--- A template haskell function that generates `n` inlined tail applications ie:
--- $(genInlinedTails 3 'xs)
---
--- compiles into:
---
--- (BI.tail (BI.tail (BI.tail xs)))
---  
-genInlinedTails :: Int -> Name -> Q Exp
-genInlinedTails n xs = foldr (\_ acc -> [| BI.tail $acc |]) (varE xs) [1..n]
-
--- Generate the builtinListLengthFast function using Template Haskell
-builtinListLengthFast :: forall a. Integer -> BI.BuiltinList a -> Integer
-builtinListLengthFast n xs
-  | 30 <= n = builtinListLength 30 $(genInlinedTails 30 'xs)
-  | 20 <= n = builtinListLength 20 $(genInlinedTails 20 'xs)
-  | 10 <= n = builtinListLength 10 $(genInlinedTails 10 'xs)
-  | otherwise = builtinListLength 0 xs
-```
-Here an implementation of the same functions in Plutarch:
-```haskell
--- The haskell level argument `initialCount` is the length which we will start the count with. 
--- That aside is just a normal recursive length function that counts the number of elements in the list (the count starts at `initialCount`)
-pbuiltinListLength :: forall s a. (PElemConstraint PBuiltinList a) => Term s PInteger -> Term s (PBuiltinList a :--> PInteger)
-pbuiltinListLength initialCount =
-  (pfix #$ plam $ \self acc l ->
-    pelimList 
-      (\_ ys -> self # (acc + 1) # ys)  -- cons case
-      acc                               -- nil case
-      l
-  )
-  # initialCount
-
--- The first argument `n` is the expected number of elements (that we compute offchain and pass in via the redeemer) and the second argument `xs` is the list.
-pbuiltinListLengthFast :: (PElemConstraint PBuiltinList a, PIsData a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
-pbuiltinListLengthFast = phoistAcyclic $ plam $ \n xs ->
-  pcond 
-    [ ((30 #<= n), ((pbuiltinListLength 30) # (nTails 30 xs)))
-    , ((20 #<= n), ((pbuiltinListLength 20) # (nTails 20 xs)))
-    , ((10 #<= n), ((pbuiltinListLength 10) # (nTails 10 xs)))
-    ]
-    (pbuiltinListLength 0 # xs)
-```
+See [ListLength.hs](examples/ListLength.hs) for one possible solution.  
 
 ## General Use
 More generally, this design pattern can be used to improve performance in any situation where checking the correctness of a result is more efficient than calculating the result. 
 
 # Example 1: Enforce that the transaction includes exactly `n` script inputs. 
 
+Here is a non-optimized implementation of a function that counts the amount of `Spend` redeemers in `txInfoRedeemers`, thus it tells us the total number of spending script executions 
+in the transaction (this will also be the total number of script inputs in the transaction).
 ```haskell
--- Plinth (formerly PlutusTx) implementation:
-{-# INLINE enforceNSpendRedeemersSkipFirst #-}
-enforceNSpendRedeemersSkipFirst :: Integer -> BuiltinData -> Bool
-enforceNSpendRedeemersSkipFirst n b = isLastSpend (dropN (n - 1) (BI.unsafeDataAsMap b))
+{-# INLINE countSpendRedeemersSkipFirst #-}
+countSpendRedeemersSkipFirst :: BuiltinData -> Integer
+countSpendRedeemersSkipFirst b = go (BI.tail $ BI.unsafeDataAsMap b) 0
   where
-    dropN :: Integer -> BI.BuiltinList a -> BI.BuiltinList a
-    dropN 0 xs = xs
-    dropN i xs = dropN (i - 1) (BI.tail xs)
-
-    isNonSpend :: BuiltinData -> Bool
-    isNonSpend red = BI.fst (BI.unsafeDataAsConstr (BI.fst $ BI.unsafeDataAsConstr red)) /= 1
-
-    isLastSpend :: BI.BuiltinList (BI.BuiltinPair BI.BuiltinData BI.BuiltinData) -> Bool
-    isLastSpend redeemers =
-      let constrPair = BI.fst $ BI.head redeemers
-          constrIdx = BI.fst (BI.unsafeDataAsConstr constrPair)
-       in if constrIdx == 1
-          then go (BI.tail redeemers)
-          else False
-
-    go :: BI.BuiltinList (BI.BuiltinPair BI.BuiltinData BI.BuiltinData) -> Bool
-    go redeemers =
-      if fromOpaque $ BI.null redeemers
-        then True
-        else isNonSpend (BI.fst $ BI.head redeemers)
-
--- Plutarch implementation
-penforceNSpendRedeemers :: forall {s :: S}. Term s PInteger -> Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PBool
-penforceNSpendRedeemers n rdmrs =
-    let isNonSpend :: Term _ (PAsData PScriptPurpose) -> Term _ PBool
-        isNonSpend red = pnot # (pfstBuiltin # (pasConstr # (pforgetData red)) #== 1)
-             
-        isLastSpend :: Term _ (PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PBool)
-        isLastSpend = plam $ \redeemers -> 
-          let constrPair :: Term s (PAsData PScriptPurpose)
-              constrPair = pfstBuiltin # (phead # redeemers)
-              constrIdx = pfstBuiltin # (pasConstr # (pforgetData constrPair))
-           in pif 
-                (constrIdx #== 1) 
-                (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
-                perror
-     in isLastSpend # (pdropFast # (n - 1) # (pto rdmrs))
+    go :: BI.BuiltinList (BI.BuiltinPair BI.BuiltinData BI.BuiltinData) -> Integer -> Integer
+    go redeemers i = if BI.fst (BI.unsafeDataAsConstr (BI.fst $ BI.head redeemers)) == 1 then go (BI.tail redeemers) (i + 1) else i
 ```
+As an exercise in this design pattern, try to design a variant of this function that takes as an argument the expected number of `Spend` redeemers (computed offchain and passed to the onchain code via the redeemer), and use it to efficiently compute the actual number of `Spend` redeemers (erroring if the actual differs from the expected).
 
 ## Singular Input Processing
 
