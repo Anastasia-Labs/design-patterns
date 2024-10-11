@@ -30,16 +30,64 @@ Thus, lookups are reduced to O(1) checks, where the on-chain code simply confirm
 You can also use this design pattern to avoid the need to perform expensive traversals of dynamic data-structures like `Lists` and `Maps` in your onchain code to determine the number of elements they contain. Instead, you can calculate the number of elements offchain, and provide it to the validator via the redeemer, then onchain you only need to check that the length your provided in the redeemer is correct. To perform this check, you apply the builtin `tail` function n times, where n is the `expectedLength` you passed via the redeemer and then you check that the result equals the empty list. 
 
 ```haskell
+builtinListLength :: forall a. Integer -> BI.BuiltinList a -> Integer
+builtinListLength acc l = 
+  case l of
+    [] -> acc
+    _ : xs -> builtinListLength (acc + 1) xs
+
+builtinListLengthFast :: forall a. Integer -> BI.BuiltinList a -> Integer
+builtinListLengthFast n xs
+  | 30 <= n = builtinListLength 30 (BI.tail (BI.tail (BI.tail ... (BI.tail xs))))  -- replace with 30 total BI.tail calls
+  | 20 <= n = builtinListLength 20 (BI.tail (BI.tail (BI.tail ... (BI.tail xs))))  -- 20 BI.tail calls
+  | 10 <= n = builtinListLength 10 (BI.tail (BI.tail (BI.tail ... (BI.tail xs))))  -- 10 BI.tail calls
+  | otherwise = builtinListLength 0 xs
+```
+If you don't want to manually write `BI.tail` dozens of times, you can use Template Haskell to automate it:
+```haskell
+import qualified PlutusTx.Builtins as BI
+import qualified PlutusTx.Builtins.Internal as BI
+import Language.Haskell.TH
+
+builtinListLength :: forall a. Integer -> BI.BuiltinList a -> Integer
+builtinListLength acc l = 
+  case l of
+    [] -> acc
+    _ : xs -> builtinListLength (acc + 1) xs
+
+-- A template haskell function that generates `n` inlined tail applications ie:
+-- $(genInlinedTails 3 'xs)
+--
+-- compiles into:
+--
+-- (BI.tail (BI.tail (BI.tail xs)))
+--  
+genInlinedTails :: Int -> Name -> Q Exp
+genInlinedTails n xs = foldr (\_ acc -> [| BI.tail $acc |]) (varE xs) [1..n]
+
+-- Generate the builtinListLengthFast function using Template Haskell
+builtinListLengthFast :: forall a. Integer -> BI.BuiltinList a -> Integer
+builtinListLengthFast n xs
+  | 30 <= n = builtinListLength 30 $(genInlinedTails 30 'xs)
+  | 20 <= n = builtinListLength 20 $(genInlinedTails 20 'xs)
+  | 10 <= n = builtinListLength 10 $(genInlinedTails 10 'xs)
+  | otherwise = builtinListLength 0 xs
+```
+Here an implementation of the same functions in Plutarch:
+```haskell
+-- The haskell level argument `initialCount` is the length which we will start the count with. 
+-- That aside is just a normal recursive length function that counts the number of elements in the list (the count starts at `initialCount`)
 pbuiltinListLength :: forall s a. (PElemConstraint PBuiltinList a) => Term s PInteger -> Term s (PBuiltinList a :--> PInteger)
-pbuiltinListLength acc =
+pbuiltinListLength initialCount =
   (pfix #$ plam $ \self acc l ->
     pelimList 
       (\_ ys -> self # (acc + 1) # ys)  -- cons case
       acc                               -- nil case
       l
   )
-  # acc
+  # initialCount
 
+-- The first argument `n` is the expected number of elements (that we compute offchain and pass in via the redeemer) and the second argument `xs` is the list.
 pbuiltinListLengthFast :: (PElemConstraint PBuiltinList a, PIsData a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
 pbuiltinListLengthFast = phoistAcyclic $ plam $ \n xs ->
   pcond 
@@ -54,7 +102,35 @@ pbuiltinListLengthFast = phoistAcyclic $ plam $ \n xs ->
 More generally, this design pattern can be used to improve performance in any situation where checking the correctness of a result is more efficient than calculating the result. 
 
 # Example 1: Enforce that the transaction includes exactly `n` script inputs. 
+
 ```haskell
+-- Plinth (formerly PlutusTx) implementation:
+{-# INLINE enforceNSpendRedeemersSkipFirst #-}
+enforceNSpendRedeemersSkipFirst :: Integer -> BuiltinData -> Bool
+enforceNSpendRedeemersSkipFirst n b = isLastSpend (dropN (n - 1) (BI.unsafeDataAsMap b))
+  where
+    dropN :: Integer -> BI.BuiltinList a -> BI.BuiltinList a
+    dropN 0 xs = xs
+    dropN i xs = dropN (i - 1) (BI.tail xs)
+
+    isNonSpend :: BuiltinData -> Bool
+    isNonSpend red = BI.fst (BI.unsafeDataAsConstr (BI.fst $ BI.unsafeDataAsConstr red)) /= 1
+
+    isLastSpend :: BI.BuiltinList (BI.BuiltinPair BI.BuiltinData BI.BuiltinData) -> Bool
+    isLastSpend redeemers =
+      let constrPair = BI.fst $ BI.head redeemers
+          constrIdx = BI.fst (BI.unsafeDataAsConstr constrPair)
+       in if constrIdx == 1
+          then go (BI.tail redeemers)
+          else False
+
+    go :: BI.BuiltinList (BI.BuiltinPair BI.BuiltinData BI.BuiltinData) -> Bool
+    go redeemers =
+      if fromOpaque $ BI.null redeemers
+        then True
+        else isNonSpend (BI.fst $ BI.head redeemers)
+
+-- Plutarch implementation
 penforceNSpendRedeemers :: forall {s :: S}. Term s PInteger -> Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PBool
 penforceNSpendRedeemers n rdmrs =
     let isNonSpend :: Term _ (PAsData PScriptPurpose) -> Term _ PBool
