@@ -17,11 +17,11 @@ To determine that a `CurrencySymbol`, for instance `scriptHashToCheck`, is deriv
 ```haskell
 let plutusVersion = 3
     versionHeader = integerToByteString True 1 plutusVersion
-    scriptHeader = versionHeader <> prefix <> hashedParam
+    scriptHeader = versionHeader <> prefix <> param
     final_res = scriptHeader <> postfix
 in hash final_res == scriptHashToCheck
 ```
-Where `hashedParam` is `blake2b_224 $ serialiseData TX_OUT_REF_PARAM`, `prefix` is the cbor script bytes of `oneShotValidator` before the argument, and `postfix` is the cbor script bytes of the `oneShotValidator` after the argument.
+Where `hashedParam` is `serialiseData TX_OUT_REF_PARAM`, `prefix` is the cbor script bytes of `oneShotValidator` before the argument, and `postfix` is the cbor script bytes of the `oneShotValidator` after the argument.
 
 Parameterized scripts used in this design pattern should have the form:
 ```
@@ -30,6 +30,9 @@ Parameterized scripts used in this design pattern should have the form:
 So that if the param is used multiple times it doesn't need to be spliced in everywhere.
 
 Given a plutus script that accepts parameters (in the above example, a `TxOutRef`), with this design pattern you can verify onchain that a given script hash is an instance of that script with a specific parameter applied.
+
+# Examples and Implementation
+We maintain a standard library that provides a high-level abstraction for onchain parameter validation and many other design patterns. You can explore the implementation of this design pattern in our [aiken-design-patterns](https://github.com/Anastasia-Labs/aiken-design-patterns/blob/develop/lib/aiken-design-patterns/parameter-validation.ak) repository.
 
 # Considerations
 This design pattern only works under the assumption that the parameter is constant size (this holds true for `TxOutRef`). If a script accepts parameters with dynamic size (ie. arbitrary size integer / bytestring) then to use it with this
