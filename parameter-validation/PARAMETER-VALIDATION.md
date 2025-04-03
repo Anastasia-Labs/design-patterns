@@ -14,12 +14,14 @@ oneShotValidate oref ctx = any (\input -> txInInfoOutRef input == oref) inputs
 ```
 
 To determine that a `CurrencySymbol`, for instance `scriptHashToCheck`, is derived from the result of applying a given `TxOutRef` to the `oneShotValidate` script (and thus must be a fixed-supply token):
+```haskell
+let plutusVersion = 3
+    versionHeader = integerToByteString True 1 plutusVersion
+    scriptHeader = versionHeader <> prefix <> hashedParam
+    final_res = scriptHeader <> postfix
+in hash final_res == scriptHashToCheck
 ```
-res = appendByteString param prefix
-final_res = appendByteString postfix res
-hash final_res == scriptHashToCheck
-```
-Where `param` is `serialiseData TX_OUT_REF_PARAM`, `prefix` is the cbor script bytes of `oneShotValidator` before the argument, and `postfix` is the cbor script bytes of the `oneShotValidator` after the argument.
+Where `hashedParam` is `blake2b_224 $ serialiseData TX_OUT_REF_PARAM`, `prefix` is the cbor script bytes of `oneShotValidator` before the argument, and `postfix` is the cbor script bytes of the `oneShotValidator` after the argument.
 
 Parameterized scripts used in this design pattern should have the form:
 ```
