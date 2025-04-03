@@ -21,7 +21,7 @@ let plutusVersion = 3
     final_res = scriptHeader <> postfix
 in hash final_res == scriptHashToCheck
 ```
-Where `hashedParam` is `serialiseData TX_OUT_REF_PARAM`, `prefix` is the cbor script bytes of `oneShotValidator` before the argument, and `postfix` is the cbor script bytes of the `oneShotValidator` after the argument.
+Where `param` is `serialiseData TX_OUT_REF_PARAM`, `prefix` is the cbor script bytes of `oneShotValidator` before the argument, and `postfix` is the cbor script bytes of the `oneShotValidator` after the argument.
 
 Parameterized scripts used in this design pattern should have the form:
 ```
